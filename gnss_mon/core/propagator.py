@@ -147,18 +147,21 @@ def propagate_glonass(eph: GlonassEphemeris, utc: datetime) -> np.ndarray | None
     """
     dt_total = (utc.replace(tzinfo=None) - eph.epoch.replace(tzinfo=None)).total_seconds()
 
-    # No hard time limit — accuracy degrades far from epoch but we still
-    # show positions for monitoring purposes (same as Keplerian satellites).
-
     state = np.array([eph.X, eph.Y, eph.Z, eph.dX, eph.dY, eph.dZ])
     acc = np.array([eph.dX2, eph.dY2, eph.dZ2])
 
-    step = 60.0  # integration step (seconds)
+    # Limit the number of RK4 iterations to avoid freezing the UI.
+    # Use a 60-s step up to 4 h; beyond that, increase the step size so
+    # the loop never exceeds ~240 iterations.  Accuracy degrades but we
+    # still get a reasonable orbital guess.
+    MAX_ITERS = 240
+    abs_dt = abs(dt_total)
+    step = max(60.0, abs_dt / MAX_ITERS)
     if dt_total < 0:
         step = -step
 
     t = 0.0
-    remaining = abs(dt_total)
+    remaining = abs_dt
 
     while remaining > 1e-9:
         h = step if remaining >= abs(step) else math.copysign(remaining, step)
